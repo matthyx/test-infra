@@ -60,6 +60,7 @@ type Configuration struct {
 	Owners Owners `json:"owners,omitempty"`
 
 	// Built-in plugins specific configuration.
+	ApproveRaw           json.RawMessage              `json:"approve,omitempty"`
 	Approve              []Approve                    `json:"approve,omitempty"`
 	Blockades            []Blockade                   `json:"blockades,omitempty"`
 	Blunderbuss          Blunderbuss                  `json:"blunderbuss,omitempty"`
@@ -267,17 +268,15 @@ type Blockade struct {
 //
 // The configuration for the approve plugin is defined as a list of these structures.
 type Approve struct {
-	// Repos is either of the form org/repos or just org.
-	Repos []string `json:"repos,omitempty"`
 	// IssueRequired indicates if an associated issue is required for approval in
 	// the specified repos.
-	IssueRequired bool `json:"issue_required,omitempty"`
+	IssueRequired *bool `json:"issue_required,omitempty"`
 	// RequireSelfApproval requires PR authors to explicitly approve their PRs.
 	// Otherwise the plugin assumes the author of the PR approves the changes in the PR.
 	RequireSelfApproval *bool `json:"require_self_approval,omitempty"`
 	// LgtmActsAsApprove indicates that the lgtm command should be used to
 	// indicate approval
-	LgtmActsAsApprove bool `json:"lgtm_acts_as_approve,omitempty"`
+	LgtmActsAsApprove *bool `json:"lgtm_acts_as_approve,omitempty"`
 	// IgnoreReviewState causes the approve plugin to ignore the GitHub review state. Otherwise:
 	// * an APPROVE github review is equivalent to leaving an "/approve" message.
 	// * A REQUEST_CHANGES github review is equivalent to leaving an /approve cancel" message.
@@ -291,9 +290,31 @@ type Approve struct {
 	PrProcessLink string `json:"pr_process_link,omitempty"`
 }
 
+// DeprecatedApprove is a composed type for compatibility with the old config format
+type DeprecatedApprove struct {
+	// Repos is either of the form org/repos or just org.
+	Repos []string `json:"repos,omitempty"`
+
+	Approve
+}
+
 var (
 	warnDependentBugTargetRelease time.Time
 )
+
+func (a Approve) AreIssueRequired() bool {
+	if a.IssueRequired != nil {
+		return *a.IssueRequired
+	}
+	return false
+}
+
+func (a Approve) ShouldLgtmActsAsApprove() bool {
+	if a.LgtmActsAsApprove != nil {
+		return *a.LgtmActsAsApprove
+	}
+	return false
+}
 
 func (a Approve) HasSelfApproval() bool {
 	if a.RequireSelfApproval != nil {
@@ -707,15 +728,43 @@ func (r RequireMatchingLabel) Describe() string {
 	return str.String()
 }
 
+func oldToNewApprove(old DeprecatedApprove) *Approve {
+	new := Approve{
+		IgnoreReviewState:   old.IgnoreReviewState,
+		IssueRequired:       old.IssueRequired,
+		LgtmActsAsApprove:   old.LgtmActsAsApprove,
+		RequireSelfApproval: old.RequireSelfApproval,
+		CommandHelpLink:     old.CommandHelpLink,
+		PrProcessLink:       old.PrProcessLink,
+	}
+	return &new
+}
+
 // ApproveFor finds the Approve for a repo, if one exists.
 // Approval configuration can be listed for a repository
 // or an organization.
 func (c *Configuration) ApproveFor(org, repo string) *Approve {
+	var old []DeprecatedApprove
+	if err := json.Unmarshal(c.ApproveRaw, &old); err != nil {
+		// Plugin probably uses a ConfigTree based config
+		var new ApproveConfigTree
+		if err := json.Unmarshal(c.ApproveRaw, &new); err != nil {
+			// Config is not unmarshallable
+			logrus.WithError(err).Error("error unmarshalling Approve config to DeprecatedApprove and ApproveConfigTree")
+		}
+		return new.RepoOptions(org, repo)
+	}
+	// Plugin uses a DeprecatedApprove, let's warn the user and return the config
+	logrus.Warn("plugin uses a deprecated config style, please migrate to a ConfigTree based config")
+	return oldToNewApprove(*c.deprecatedApproveFor(old, org, repo))
+}
+
+func (c *Configuration) deprecatedApproveFor(deprecatedApprove []DeprecatedApprove, org, repo string) *DeprecatedApprove {
 	fullName := fmt.Sprintf("%s/%s", org, repo)
 
-	a := func() *Approve {
+	a := func() *DeprecatedApprove {
 		// First search for repo config
-		for _, approve := range c.Approve {
+		for _, approve := range deprecatedApprove {
 			if !sets.NewString(approve.Repos...).Has(fullName) {
 				continue
 			}
@@ -723,7 +772,7 @@ func (c *Configuration) ApproveFor(org, repo string) *Approve {
 		}
 
 		// If you don't find anything, loop again looking for an org config
-		for _, approve := range c.Approve {
+		for _, approve := range deprecatedApprove {
 			if !sets.NewString(approve.Repos...).Has(org) {
 				continue
 			}
@@ -731,7 +780,7 @@ func (c *Configuration) ApproveFor(org, repo string) *Approve {
 		}
 
 		// Return an empty config, and use plugin defaults
-		return &Approve{}
+		return &DeprecatedApprove{}
 	}()
 	if a.CommandHelpLink == "" {
 		a.CommandHelpLink = "https://go.k8s.io/bot-commands"

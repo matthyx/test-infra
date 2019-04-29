@@ -59,23 +59,7 @@ func TestPluginConfig(t *testing.T) {
 	}
 	pa.Set(np)
 
-	orgs := map[string]bool{}
-	repos := map[string]bool{}
-	for _, config := range pa.Config().Approve {
-		for _, entry := range config.Repos {
-			if strings.Contains(entry, "/") {
-				if repos[entry] {
-					t.Errorf("The repo %q is duplicated in the 'approve' plugin configuration.", entry)
-				}
-				repos[entry] = true
-			} else {
-				if orgs[entry] {
-					t.Errorf("The org %q is duplicated in the 'approve' plugin configuration.", entry)
-				}
-				orgs[entry] = true
-			}
-		}
-	}
+	// no need to check for duplicates as the ConfigTree uses maps
 }
 
 func newTestComment(user, body string) github.IssueComment {
@@ -1088,10 +1072,9 @@ Approvers can cancel approval by writing ` + "`/approve cancel`" + ` in a commen
 				LinkURL: test.githubLinkURL,
 			},
 			&plugins.Approve{
-				Repos:               []string{"org/repo"},
 				RequireSelfApproval: &rsa,
-				IssueRequired:       test.needsIssue,
-				LgtmActsAsApprove:   test.lgtmActsAsApprove,
+				IssueRequired:       &test.needsIssue,
+				LgtmActsAsApprove:   &test.lgtmActsAsApprove,
 				IgnoreReviewState:   &irs,
 				CommandHelpLink:     "https://go.k8s.io/bot-commands",
 				PrProcessLink:       "https://git.k8s.io/community/contributors/guide/owners.md#the-code-review-process",
@@ -1358,45 +1341,63 @@ func TestHandleGenericComment(t *testing.T) {
 	}
 	fghc := fakegithub.NewFakeClient()
 	fghc.PullRequests = map[int]*github.PullRequest{1: &pr}
+	const oldConfigTemplate = `
+---
+approve:
+- repos:
+  - %s
+  lgtm_acts_as_approve: %t
+`
+	const newConfigTemplate = `
+---
+approve:
+  orgs:
+    %s:
+      lgtm_acts_as_approve: %t
+`
 
-	for _, test := range tests {
-		test.commentEvent.Repo = repo
-		githubConfig := config.GitHubOptions{
-			LinkURL: &url.URL{
-				Scheme: "https",
-				Host:   "github.com",
-			},
-		}
-		config := &plugins.Configuration{}
-		config.Approve = append(config.Approve, plugins.Approve{
-			Repos:             []string{test.commentEvent.Repo.Owner.Login},
-			LgtmActsAsApprove: test.lgtmActsAsApprove,
-		})
-		err := handleGenericComment(
-			logrus.WithField("plugin", "approve"),
-			fghc,
-			fakeOwnersClient{},
-			githubConfig,
-			config,
-			&test.commentEvent,
-		)
+	for _, configTemplate := range []string{oldConfigTemplate, newConfigTemplate} {
+		for _, test := range tests {
+			test.commentEvent.Repo = repo
+			githubConfig := config.GitHubOptions{
+				LinkURL: &url.URL{
+					Scheme: "https",
+					Host:   "github.com",
+				},
+			}
+			configYaml := fmt.Sprintf(configTemplate, test.commentEvent.Repo.Owner.Login, test.lgtmActsAsApprove)
+			var config plugins.Configuration
+			err := yaml.Unmarshal([]byte(configYaml), &config)
+			if err != nil {
+				t.Errorf("%s: error unmarshalling config: %v", test.name, err)
+			}
 
-		if test.expectHandle && !handled {
-			t.Errorf("%s: expected call to handleFunc, but it wasn't called", test.name)
-		}
+			err = handleGenericComment(
+				logrus.WithField("plugin", "approve"),
+				fghc,
+				fakeOwnersClient{},
+				githubConfig,
+				&config,
+				&test.commentEvent,
+			)
 
-		if !test.expectHandle && handled {
-			t.Errorf("%s: expected no call to handleFunc, but it was called", test.name)
-		}
+			if test.expectHandle && !handled {
+				t.Errorf("%s: expected call to handleFunc, but it wasn't called", test.name)
+			}
 
-		if test.expectState != nil && !reflect.DeepEqual(test.expectState, gotState) {
-			t.Errorf("%s: expected PR state to equal: %#v, but got: %#v", test.name, test.expectState, gotState)
-		}
+			if !test.expectHandle && handled {
+				t.Errorf("%s: expected no call to handleFunc, but it was called", test.name)
+			}
 
-		if err != nil {
-			t.Errorf("%s: error calling handleGenericComment: %v", test.name, err)
+			if test.expectState != nil && !reflect.DeepEqual(test.expectState, gotState) {
+				t.Errorf("%s: expected PR state to equal: %#v, but got: %#v", test.name, test.expectState, gotState)
+			}
+
+			if err != nil {
+				t.Errorf("%s: error calling handleGenericComment: %v", test.name, err)
+			}
+			handled = false
 		}
-		handled = false
 	}
 }
 
@@ -1577,47 +1578,63 @@ func TestHandleReview(t *testing.T) {
 	fghc := fakegithub.NewFakeClient()
 	fghc.PullRequests = map[int]*github.PullRequest{1: &pr}
 
-	for _, test := range tests {
-		test.reviewEvent.Repo = repo
-		test.reviewEvent.PullRequest = pr
-		githubConfig := config.GitHubOptions{
-			LinkURL: &url.URL{
-				Scheme: "https",
-				Host:   "github.com",
-			},
-		}
-		config := &plugins.Configuration{}
-		irs := !test.reviewActsAsApprove
-		config.Approve = append(config.Approve, plugins.Approve{
-			Repos:             []string{test.reviewEvent.Repo.Owner.Login},
-			LgtmActsAsApprove: test.lgtmActsAsApprove,
-			IgnoreReviewState: &irs,
-		})
-		err := handleReview(
-			logrus.WithField("plugin", "approve"),
-			fghc,
-			fakeOwnersClient{},
-			githubConfig,
-			config,
-			&test.reviewEvent,
-		)
+	const oldConfigTemplate = `
+---
+approve:
+- repos:
+  - %s
+  lgtm_acts_as_approve: %t
+  ignore_review_state: %t
+`
+	const newConfigTemplate = `
+---
+approve:
+  orgs:
+    %s:
+      lgtm_acts_as_approve: %t
+      ignore_review_state: %t
+`
 
-		if test.expectHandle && !handled {
-			t.Errorf("%s: expected call to handleFunc, but it wasn't called", test.name)
-		}
+	for _, configTemplate := range []string{oldConfigTemplate, newConfigTemplate} {
+		for _, test := range tests {
+			test.reviewEvent.Repo = repo
+			test.reviewEvent.PullRequest = pr
+			githubConfig := config.GitHubOptions{
+				LinkURL: &url.URL{
+					Scheme: "https",
+					Host:   "github.com",
+				},
+			}
+			irs := !test.reviewActsAsApprove
+			configYaml := fmt.Sprintf(configTemplate, test.reviewEvent.Repo.Owner.Login, test.lgtmActsAsApprove, irs)
+			var config plugins.Configuration
+			yaml.Unmarshal([]byte(configYaml), &config)
+			err := handleReview(
+				logrus.WithField("plugin", "approve"),
+				fghc,
+				fakeOwnersClient{},
+				githubConfig,
+				&config,
+				&test.reviewEvent,
+			)
 
-		if !test.expectHandle && handled {
-			t.Errorf("%s: expected no call to handleFunc, but it was called", test.name)
-		}
+			if test.expectHandle && !handled {
+				t.Errorf("%s: expected call to handleFunc, but it wasn't called", test.name)
+			}
 
-		if test.expectState != nil && !reflect.DeepEqual(test.expectState, gotState) {
-			t.Errorf("%s: expected PR state to equal: %#v, but got: %#v", test.name, test.expectState, gotState)
-		}
+			if !test.expectHandle && handled {
+				t.Errorf("%s: expected no call to handleFunc, but it was called", test.name)
+			}
 
-		if err != nil {
-			t.Errorf("%s: error calling handleReview: %v", test.name, err)
+			if test.expectState != nil && !reflect.DeepEqual(test.expectState, gotState) {
+				t.Errorf("%s: expected PR state to equal: %#v, but got: %#v", test.name, test.expectState, gotState)
+			}
+
+			if err != nil {
+				t.Errorf("%s: error calling handleReview: %v", test.name, err)
+			}
+			handled = false
 		}
-		handled = false
 	}
 }
 
@@ -1770,6 +1787,11 @@ func TestHelpProvider(t *testing.T) {
 		{Org: "org1", Repo: "repo"},
 		{Org: "org2", Repo: "repo"},
 	}
+	oa, _ := yaml.Marshal([]plugins.DeprecatedApprove{
+		{
+			Repos: []string{"org2"},
+		},
+	})
 	cases := []struct {
 		name         string
 		config       *plugins.Configuration
@@ -1784,15 +1806,7 @@ func TestHelpProvider(t *testing.T) {
 		{
 			name: "All configs enabled",
 			config: &plugins.Configuration{
-				Approve: []plugins.Approve{
-					{
-						Repos:               []string{"org2/repo"},
-						IssueRequired:       true,
-						RequireSelfApproval: &[]bool{true}[0],
-						LgtmActsAsApprove:   true,
-						IgnoreReviewState:   &[]bool{true}[0],
-					},
-				},
+				ApproveRaw: oa,
 			},
 			enabledRepos: enabledRepos,
 		},
