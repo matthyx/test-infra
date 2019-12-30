@@ -5,10 +5,24 @@ load(
     "go_library",
     "go_test",
 )
+load("@go_generics//tools/go_generics:defs.bzl", "go_template_instance")
+
+go_template_instance(
+    name = "approve_configtree",
+    out = "approve_configtree.go",
+    anon = True,
+    package = "plugins",
+    prefix = "Approve",
+    template = "//prow/templates:generic_configtree",
+    types = {
+        "T": "Approve",
+    },
+)
 
 go_test(
     name = "go_default_test",
     srcs = [
+        "approve_configtree_test.go",
         "config_test.go",
         "plugins_test.go",
         "respond_test.go",
@@ -19,13 +33,18 @@ go_test(
         "//prow/github:go_default_library",
         "@io_k8s_apimachinery//pkg/util/diff:go_default_library",
         "@io_k8s_sigs_yaml//:go_default_library",
+        "//vendor/github.com/google/go-cmp/cmp:go_default_library",
+        "//vendor/k8s.io/apimachinery/pkg/util/diff:go_default_library",
+        "//vendor/sigs.k8s.io/yaml:go_default_library",
     ],
 )
 
 go_library(
     name = "go_default_library",
     srcs = [
+        "approve_configtree.go",
         "config.go",
+        "helpers.go",
         "plugins.go",
         "respond.go",
     ],

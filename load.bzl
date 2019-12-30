@@ -63,6 +63,13 @@ def repositories():
         #tag = "0.0.8+but-this-isn't-new-enough", # Latest at https://github.com/bazelbuild/rules_appengine/releases.
     )
 
+    git_repository(
+        name = "go_generics",
+        commit = "239d7c6fdf344fe7051328056b7578657c7b6950",
+        remote = "https://github.com/google/gvisor",
+        shallow_since = "1562911788 +0200",
+    )
+
     new_git_repository(
         name = "com_github_operator_framework_community_operators",
         build_file_content = """

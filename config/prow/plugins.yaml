@@ -39,56 +39,85 @@ use_deprecated_2018_implicit_self_approve_default_migrate_before_july_2019: true
 use_deprecated_2018_review_acts_as_approve_default_migrate_before_july_2019: true
 
 approve:
-- repos:
-  - kubernetes/cloud-provider-aws
-  - kubernetes/cluster-registry
-  - kubernetes/contrib
-  - kubernetes/dashboard
-  - kubernetes/dns
-  - kubernetes/enhancements
-  - kubernetes/examples
-  - kubernetes/federation
-  - kubernetes/gengo
-  - kubernetes/ingress-gce
-  - kubernetes/ingress-nginx
-  - kubernetes/klog
-  - kubernetes/kubeadm
-  - kubernetes/kubectl
-  - kubernetes/kube-deploy
-  - kubernetes/kubernetes-template-project
-  - kubernetes/kube-state-metrics
-  - kubernetes/minikube
-  - kubernetes/node-problem-detector
-  - kubernetes/perf-tests
-  - kubernetes/publishing-bot
-  - kubernetes/release
-  - kubernetes/sig-release
-  - kubernetes/steering
-  - kubernetes/system-validators
-  - kubernetes/utils
-  require_self_approval: false
-  lgtm_acts_as_approve: true
-- repos:
-  - kubernetes/kops
-  - kubernetes/kubernetes
-  - kubernetes-client
-  - kubernetes-csi
-  - kubernetes-sigs
-  require_self_approval: false
-- repos:
-  - bazelbuild
-  - kubernetes/community
-  - kubernetes/org
-  - kubernetes/repo-infra
-  - kubernetes-sigs/kind
-  - kubernetes/test-infra
-  - kubernetes-sigs/slack-infra
-  require_self_approval: false
-  ignore_review_state: false
-- repos:
-  - helm/charts
-  require_self_approval: false
-  lgtm_acts_as_approve: true
+  orgs:
+    bazelbuild:
+      ignore_review_state: false
+    helm:
+      repos:
+        charts:
+          lgtm_acts_as_approve: true
+    kubernetes:
+      repos:
+        cloud-provider-aws:
+          lgtm_acts_as_approve: true
+        cluster-registry:
+          lgtm_acts_as_approve: true
+        community:
+          ignore_review_state: false
+        contrib:
+          lgtm_acts_as_approve: true
+        dashboard:
+          lgtm_acts_as_approve: true
+        dns:
+          lgtm_acts_as_approve: true
+        enhancements:
+          lgtm_acts_as_approve: true
+        examples:
+          lgtm_acts_as_approve: true
+        federation:
+          lgtm_acts_as_approve: true
+        gengo:
+          lgtm_acts_as_approve: true
+        ingress-gce:
+          lgtm_acts_as_approve: true
+        ingress-nginx:
+          lgtm_acts_as_approve: true
+        klog:
+          lgtm_acts_as_approve: true
+        kube-deploy:
+          lgtm_acts_as_approve: true
+        kube-state-metrics:
+            lgtm_acts_as_approve: true
+        kubeadm:
+          lgtm_acts_as_approve: true
+        kubectl:
+          lgtm_acts_as_approve: true
+        kubernetes-template-project:
+          lgtm_acts_as_approve: true
+        minikube:
+          lgtm_acts_as_approve: true
+        node-problem-detector:
+          lgtm_acts_as_approve: true
+        org:
+          ignore_review_state: false
+        perf-tests:
+          lgtm_acts_as_approve: true
+        publishing-bot:
+          lgtm_acts_as_approve: true
+        release:
+          lgtm_acts_as_approve: true
+        repo-infra:
+          ignore_review_state: false
+        sig-release:
+          lgtm_acts_as_approve: true
+        steering:
+          lgtm_acts_as_approve: true
+        system-validators:
+          lgtm_acts_as_approve: true
+        test-infra:
+          ignore_review_state: false
+        utils:
+          lgtm_acts_as_approve: true
+    kubernetes-incubator:
+      repos:
+        ip-masq-agent:
+          lgtm_acts_as_approve: true
+    kubernetes-sigs:
+      repos:
+        kind:
+          ignore_review_state: false
+        slack-infra:
+          ignore_review_state: false
 
 # Lower bounds in number of lines changed; XS is assumed to be zero.
 size:

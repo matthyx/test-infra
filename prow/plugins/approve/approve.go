@@ -113,12 +113,12 @@ func helpProvider(config *plugins.Configuration, enabledRepos []string) (*plugin
 	approveConfig := map[string]string{}
 	for _, repo := range enabledRepos {
 		parts := strings.Split(repo, "/")
-		var opts *plugins.Approve
+		var opts plugins.Approve
 		switch len(parts) {
 		case 1:
-			opts = config.ApproveFor(repo, "")
+			opts = config.Approve.OrgOptions(repo)
 		case 2:
-			opts = config.ApproveFor(parts[0], parts[1])
+			opts = config.Approve.RepoOptions(parts[0], parts[1])
 		default:
 			return nil, fmt.Errorf("invalid repo in enabledRepos: %q", repo)
 		}
@@ -126,18 +126,7 @@ func helpProvider(config *plugins.Configuration, enabledRepos []string) (*plugin
 	}
 
 	yamlSnippet, err := plugins.CommentMap.GenYaml(&plugins.Configuration{
-		Approve: []plugins.Approve{
-			{
-				Repos: []string{
-					"ORGANIZATION",
-					"ORGANIZATION/REPOSITORY",
-				},
-				DeprecatedImplicitSelfApprove: new(bool),
-				RequireSelfApproval:           new(bool),
-				DeprecatedReviewActsAsApprove: new(bool),
-				IgnoreReviewState:             new(bool),
-			},
-		},
+		Approve: plugins.ApproveConfigTree{},
 	})
 	if err != nil {
 		logrus.WithError(err).Warn("cannot generate comments for approve plugin")
@@ -162,17 +151,18 @@ func helpProvider(config *plugins.Configuration, enabledRepos []string) (*plugin
 }
 
 func handleGenericCommentEvent(pc plugins.Agent, ce github.GenericCommentEvent) error {
+	opts := pc.PluginConfig.Approve.BranchOptions(ce.Repo.Owner.Login, ce.Repo.Name, ce.Repo.DefaultBranch)
 	return handleGenericComment(
 		pc.Logger,
 		pc.GitHubClient,
 		pc.OwnersClient,
 		pc.Config.GitHubOptions,
-		pc.PluginConfig,
+		&opts,
 		&ce,
 	)
 }
 
-func handleGenericComment(log *logrus.Entry, ghc githubClient, oc ownersClient, githubConfig config.GitHubOptions, config *plugins.Configuration, ce *github.GenericCommentEvent) error {
+func handleGenericComment(log *logrus.Entry, ghc githubClient, oc ownersClient, githubConfig config.GitHubOptions, opts *plugins.Approve, ce *github.GenericCommentEvent) error {
 	if ce.Action != github.GenericCommentActionCreated || !ce.IsPR || ce.IssueState == "closed" {
 		return nil
 	}
@@ -182,7 +172,6 @@ func handleGenericComment(log *logrus.Entry, ghc githubClient, oc ownersClient, 
 		return err
 	}
 
-	opts := config.ApproveFor(ce.Repo.Owner.Login, ce.Repo.Name)
 	if !isApprovalCommand(botName, opts.LgtmActsAsApprove, &comment{Body: ce.Body, Author: ce.User.Login}) {
 		return nil
 	}
@@ -219,17 +208,18 @@ func handleGenericComment(log *logrus.Entry, ghc githubClient, oc ownersClient, 
 // handleReviewEvent should only handle reviews that have no approval command.
 // Reviews with approval commands will be handled by handleGenericCommentEvent.
 func handleReviewEvent(pc plugins.Agent, re github.ReviewEvent) error {
+	opts := pc.PluginConfig.Approve.BranchOptions(re.Repo.Owner.Login, re.Repo.Name, re.Repo.DefaultBranch)
 	return handleReview(
 		pc.Logger,
 		pc.GitHubClient,
 		pc.OwnersClient,
 		pc.Config.GitHubOptions,
-		pc.PluginConfig,
+		&opts,
 		&re,
 	)
 }
 
-func handleReview(log *logrus.Entry, ghc githubClient, oc ownersClient, githubConfig config.GitHubOptions, config *plugins.Configuration, re *github.ReviewEvent) error {
+func handleReview(log *logrus.Entry, ghc githubClient, oc ownersClient, githubConfig config.GitHubOptions, opts *plugins.Approve, re *github.ReviewEvent) error {
 	if re.Action != github.ReviewActionSubmitted && re.Action != github.ReviewActionDismissed {
 		return nil
 	}
@@ -238,8 +228,6 @@ func handleReview(log *logrus.Entry, ghc githubClient, oc ownersClient, githubCo
 	if err != nil {
 		return err
 	}
-
-	opts := config.ApproveFor(re.Repo.Owner.Login, re.Repo.Name)
 
 	// Check for an approval command is in the body. If one exists, let the
 	// genericCommentEventHandler handle this event. Approval commands override
@@ -264,7 +252,7 @@ func handleReview(log *logrus.Entry, ghc githubClient, oc ownersClient, githubCo
 		ghc,
 		repo,
 		githubConfig,
-		config.ApproveFor(re.Repo.Owner.Login, re.Repo.Name),
+		opts,
 		&state{
 			org:       re.Repo.Owner.Login,
 			repo:      re.Repo.Name,
@@ -280,17 +268,18 @@ func handleReview(log *logrus.Entry, ghc githubClient, oc ownersClient, githubCo
 }
 
 func handlePullRequestEvent(pc plugins.Agent, pre github.PullRequestEvent) error {
+	opts := pc.PluginConfig.Approve.BranchOptions(pre.Repo.Owner.Login, pre.Repo.Name, pre.Repo.DefaultBranch)
 	return handlePullRequest(
 		pc.Logger,
 		pc.GitHubClient,
 		pc.OwnersClient,
 		pc.Config.GitHubOptions,
-		pc.PluginConfig,
+		&opts,
 		&pre,
 	)
 }
 
-func handlePullRequest(log *logrus.Entry, ghc githubClient, oc ownersClient, githubConfig config.GitHubOptions, config *plugins.Configuration, pre *github.PullRequestEvent) error {
+func handlePullRequest(log *logrus.Entry, ghc githubClient, oc ownersClient, githubConfig config.GitHubOptions, opts *plugins.Approve, pre *github.PullRequestEvent) error {
 	if pre.Action != github.PullRequestActionOpened &&
 		pre.Action != github.PullRequestActionReopened &&
 		pre.Action != github.PullRequestActionSynchronize &&
@@ -316,7 +305,7 @@ func handlePullRequest(log *logrus.Entry, ghc githubClient, oc ownersClient, git
 		ghc,
 		repo,
 		githubConfig,
-		config.ApproveFor(pre.Repo.Owner.Login, pre.Repo.Name),
+		opts,
 		&state{
 			org:       pre.Repo.Owner.Login,
 			repo:      pre.Repo.Name,

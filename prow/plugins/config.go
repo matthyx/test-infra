@@ -57,8 +57,7 @@ type Configuration struct {
 	Owners Owners `json:"owners,omitempty"`
 
 	// Built-in plugins specific configuration.
-
-	Approve                    []Approve                    `json:"approve,omitempty"`
+	Approve                    ApproveConfigTree            `json:"approve,omitempty"`
 	UseDeprecatedSelfApprove   bool                         `json:"use_deprecated_2018_implicit_self_approve_default_migrate_before_july_2019,omitempty"`
 	UseDeprecatedReviewApprove bool                         `json:"use_deprecated_2018_review_acts_as_approve_default_migrate_before_july_2019,omitempty"`
 	Blockades                  []Blockade                   `json:"blockades,omitempty"`
@@ -250,8 +249,6 @@ type Blockade struct {
 //
 // The configuration for the approve plugin is defined as a list of these structures.
 type Approve struct {
-	// Repos is either of the form org/repos or just org.
-	Repos []string `json:"repos,omitempty"`
 	// IssueRequired indicates if an associated issue is required for approval in
 	// the specified repos.
 	IssueRequired bool `json:"issue_required,omitempty"`
@@ -684,43 +681,6 @@ func (r RequireMatchingLabel) Describe() string {
 	}
 	fmt.Fprintf(str, "that have no labels matching the regular expression '%s'.", r.Regexp)
 	return str.String()
-}
-
-// ApproveFor finds the Approve for a repo, if one exists.
-// Approval configuration can be listed for a repository
-// or an organization.
-func (c *Configuration) ApproveFor(org, repo string) *Approve {
-	fullName := fmt.Sprintf("%s/%s", org, repo)
-
-	a := func() *Approve {
-		// First search for repo config
-		for _, approve := range c.Approve {
-			if !sets.NewString(approve.Repos...).Has(fullName) {
-				continue
-			}
-			return &approve
-		}
-
-		// If you don't find anything, loop again looking for an org config
-		for _, approve := range c.Approve {
-			if !sets.NewString(approve.Repos...).Has(org) {
-				continue
-			}
-			return &approve
-		}
-
-		// Return an empty config, and use plugin defaults
-		return &Approve{}
-	}()
-	if a.DeprecatedImplicitSelfApprove == nil && a.RequireSelfApproval == nil && c.UseDeprecatedSelfApprove {
-		no := false
-		a.DeprecatedImplicitSelfApprove = &no
-	}
-	if a.DeprecatedReviewActsAsApprove == nil && a.IgnoreReviewState == nil && c.UseDeprecatedReviewApprove {
-		no := false
-		a.DeprecatedReviewActsAsApprove = &no
-	}
-	return a
 }
 
 // LgtmFor finds the Lgtm for a repo, if one exists

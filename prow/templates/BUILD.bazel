@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+load("@go_generics//tools/go_generics:defs.bzl", "go_template")
+
+go_template(
+    name = "generic_configtree",
+    srcs = ["configtree.go"],
+    types = [
+        "T",
+    ],
+)
