@@ -412,6 +412,26 @@ func TestRunAgainstBranch(t *testing.T) {
 	}
 }
 
+func TestIssue19229(t *testing.T) {
+	jobs := []Postsubmit{
+		{
+			Brancher: Brancher{
+				Branches: []string{"release-1.7-pdn", "release-1.7.*-pdn"},
+			},
+		},
+	}
+
+	if err := SetPostsubmitRegexes(jobs); err != nil {
+		t.Fatalf("could not set regexes: %v", err)
+	}
+
+	for _, job := range jobs {
+		if !job.Brancher.ShouldRun("release-1.7.1-pdn") {
+			t.Errorf("Job %s should run branch r", job.Name)
+		}
+	}
+}
+
 func TestValidPodNames(t *testing.T) {
 	for _, j := range c.AllStaticPresubmits([]string{}) {
 		if !podRe.MatchString(j.Name) {
