@@ -171,7 +171,7 @@ func Update(fg FileGetter, kc corev1.ConfigMapInterface, name, namespace string,
 	if updateErr != nil {
 		return fmt.Errorf("%s config map err: %v", verb, updateErr)
 	}
-	if metrics != nil {
+	if metrics != nil { // TODO check here
 		var size float64
 		for _, data := range cm.Data {
 			size += float64(len(data))
