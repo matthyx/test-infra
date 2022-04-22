@@ -16,11 +16,6 @@ limitations under the License.
 
 package plugins
 
-// Gen is a generic type used in ConfigTree as a leaf
-type Gen interface {
-	Apply(Gen) Gen
-}
-
 // Apply returns a policy that merges the child into the parent
 func (parent Approve) Apply(child Approve) Approve {
 	new := Approve{

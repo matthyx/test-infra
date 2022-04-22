@@ -63,7 +63,7 @@ type Configuration struct {
 	Owners Owners `json:"owners,omitempty"`
 
 	// Built-in plugins specific configuration.
-	Approve              ApproveConfigTree            `json:"approve,omitempty"`
+	Approve              ConfigTree[Approve]          `json:"approve,omitempty"`
 	Blockades            []Blockade                   `json:"blockades,omitempty"`
 	Blunderbuss          Blunderbuss                  `json:"blunderbuss,omitempty"`
 	Bugzilla             Bugzilla                     `json:"bugzilla,omitempty"`
@@ -828,22 +828,22 @@ func oldToNewApprove(old DeprecatedApprove) *Approve {
 	return &a
 }
 
-func oldToNewApproveConfig(old []DeprecatedApprove) ApproveConfigTree {
-	a := ApproveConfigTree{}
-	a.Orgs = make(map[string]ApproveOrg)
+func oldToNewApproveConfig(old []DeprecatedApprove) ConfigTree[Approve] {
+	a := ConfigTree[Approve]{}
+	a.Orgs = make(map[string]Org[Approve])
 	for _, entry := range old {
 		for _, repo := range entry.Repos {
 			s := strings.Split(repo, "/")
 			ao := a.Orgs[s[0]]
 			switch len(s) {
 			case 1:
-				ao.Approve = *oldToNewApprove(entry)
+				ao.T = *oldToNewApprove(entry)
 			case 2:
 				if ao.Repos == nil {
-					ao.Repos = make(map[string]ApproveRepo)
+					ao.Repos = make(map[string]Repo[Approve])
 				}
 				ar := ao.Repos[s[1]]
-				ar.Approve = *oldToNewApprove(entry)
+				ar.T = *oldToNewApprove(entry)
 				ao.Repos[s[1]] = ar
 			}
 			a.Orgs[s[0]] = ao
@@ -852,20 +852,20 @@ func oldToNewApproveConfig(old []DeprecatedApprove) ApproveConfigTree {
 	return a
 }
 
-type approveWithoutUnmarshaler ApproveConfigTree
+type approveWithoutUnmarshaler ConfigTree[Approve]
 
 var warnTriggerDeprecatedApprove time.Time
 
-func (a *ApproveConfigTree) UnmarshalJSON(d []byte) error {
+func (t *ConfigTree[Approve]) UnmarshalJSON(d []byte) error {
 	var oldApprove []DeprecatedApprove
 	if err := yaml.Unmarshal(d, &oldApprove); err == nil {
 		logrusutil.ThrottledWarnf(&warnTriggerDeprecatedApprove, time.Hour, "Approve plugin uses a deprecated config style, please migrate to a ConfigTree based config")
-		*a = oldToNewApproveConfig(oldApprove)
+		*t = oldToNewApproveConfig(oldApprove)
 		return nil
 	}
 	var target approveWithoutUnmarshaler
 	err := yaml.Unmarshal(d, &target)
-	*a = ApproveConfigTree(target)
+	*t = ConfigTree[Approve](target)
 	return err
 }
 
@@ -2081,8 +2081,8 @@ func (c *Configuration) HasConfigFor() (global bool, orgs sets.String, repos set
 		}
 	}
 
-	for _, approveConfig := range c.Approve {
-		for _, orgOrRepo := range approveConfig.Repos {
+	for _, approveConfig := range c.Approve.Orgs {
+		for orgOrRepo, _ := range approveConfig.Repos {
 			if strings.Contains(orgOrRepo, "/") {
 				repos.Insert(orgOrRepo)
 			} else {

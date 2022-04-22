@@ -16,68 +16,72 @@ limitations under the License.
 
 package plugins
 
-// GenConfigTree specifies the global generic config for a plugin.
-type GenConfigTree struct {
-	Gen
-	Orgs map[string]GenOrg `json:"orgs,omitempty"`
+type ProwConfig interface {
+	Approve
 }
 
-// GenOrg holds the default config for an entire org, as well as any repo overrides.
-type GenOrg struct {
-	Gen
-	Repos map[string]GenRepo `json:"repos,omitempty"`
+// ConfigTree specifies the global generic config for a plugin.
+type ConfigTree[T ProwConfig] struct {
+	T
+	Orgs map[string]Org[T] `json:"orgs,omitempty"`
 }
 
-// GenRepo holds the default config for all branches in a repo, as well as specific branch overrides.
-type GenRepo struct {
-	Gen
-	Branches map[string]Gen `json:"branches,omitempty"`
+// Org holds the default config for an entire org, as well as any repo overrides.
+type Org[T ProwConfig] struct {
+	T
+	Repos map[string]Repo[T] `json:"repos,omitempty"`
+}
+
+// Repo holds the default config for all branches in a repo, as well as specific branch overrides.
+type Repo[T ProwConfig] struct {
+	T
+	Branches map[string]T `json:"branches,omitempty"`
 }
 
 // GetOrg returns the org config after merging in any global config.
-func (t GenConfigTree) GetOrg(name string) *GenOrg {
+func (t ConfigTree[T]) GetOrg(name string) *Org[T] {
 	o, ok := t.Orgs[name]
 	if ok {
-		o.Gen = t.Apply(o.Gen)
+		o.T = t.Apply(o.T.(Approve))
 	} else {
-		o.Gen = t.Gen
+		o.T = t.T
 	}
 	return &o
 }
 
 // GetRepo returns the repo config after merging in any org config.
-func (o GenOrg) GetRepo(name string) *GenRepo {
+func (o Org[T]) GetRepo(name string) *Repo[T] {
 	r, ok := o.Repos[name]
 	if ok {
-		r.Gen = o.Apply(r.Gen)
+		r.T = o.Apply(r.T.(Approve))
 	} else {
-		r.Gen = o.Gen
+		r.T = o.T
 	}
 	return &r
 }
 
 // GetBranch returns the branch config after merging in any repo config.
-func (r GenRepo) GetBranch(name string) *Gen {
+func (r Repo[T]) GetBranch(name string) *T {
 	b, ok := r.Branches[name]
 	if ok {
-		b = r.Apply(b)
+		b = r.Apply(b.(Approve))
 	} else {
-		b = r.Gen
+		b = r.T
 	}
 	return &b
 }
 
 // BranchOptions returns the plugin configuration for a given org/repo/branch.
-func (t *GenConfigTree) BranchOptions(org, repo, branch string) *Gen {
+func (t *ConfigTree[T]) BranchOptions(org, repo, branch string) *T {
 	return t.GetOrg(org).GetRepo(repo).GetBranch(branch)
 }
 
 // RepoOptions returns the plugin configuration for a given org/repo.
-func (t *GenConfigTree) RepoOptions(org, repo string) *Gen {
-	return &t.GetOrg(org).GetRepo(repo).Gen
+func (t *ConfigTree[T]) RepoOptions(org, repo string) *T {
+	return &t.GetOrg(org).GetRepo(repo).T
 }
 
 // OrgOptions returns the plugin configuration for a given org.
-func (t *GenConfigTree) OrgOptions(org string) *Gen {
-	return &t.GetOrg(org).Gen
+func (t *ConfigTree[T]) OrgOptions(org string) *T {
+	return &t.GetOrg(org).T
 }

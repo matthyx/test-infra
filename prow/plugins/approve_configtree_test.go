@@ -223,7 +223,7 @@ orgs:
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			var tree ApproveConfigTree
+			var tree ConfigTree[Approve]
 			if err := yaml.Unmarshal(c.config, &tree); err != nil {
 				t.Errorf("error unmarshaling config: %v", err)
 			}
